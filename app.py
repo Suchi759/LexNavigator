@@ -9,13 +9,11 @@ from sentence_transformers import SentenceTransformer
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
-# ================= EMBEDDINGS =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# ================= PAGE CONFIG =================
-st.set_page_config(page_title="LexNavigator  ⚖️", layout="wide", page_icon="⚖️")
+# ================= UI =================
+st.set_page_config(page_title="LexNavigator AI ⚖️", layout="wide")
 
-# ================= CINEMATIC UI =================
 st.markdown("""
 <style>
 .stApp {
@@ -23,34 +21,30 @@ st.markdown("""
     color: #e5e7eb;
 }
 
-.main-header {
+.main {
     text-align:center;
-    font-size:3.2rem;
+    font-size:3rem;
     font-weight:900;
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     -webkit-background-clip:text;
     -webkit-text-fill-color:transparent;
 }
 
-.glass {
+.block {
     background: rgba(10,14,30,0.7);
-    padding:18px;
-    border-radius:16px;
-    border:1px solid rgba(0,212,255,0.2);
-}
-
-.stButton>button {
-    background: linear-gradient(135deg,#00d4ff,#a855f7,#ff3d81);
-    color:white;
+    padding:15px;
     border-radius:12px;
-    font-weight:700;
+    margin-bottom:10px;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">⚖️ LEXNAVIGATOR </div>', unsafe_allow_html=True)
+st.markdown('<div class="main">⚖️ LEXNAVIGATOR AI</div>', unsafe_allow_html=True)
 
-# ================= SAFE SESSION =================
+# ================= STATE =================
+if "text" not in st.session_state:
+    st.session_state.text = ""
+
 if "chunks" not in st.session_state:
     st.session_state.chunks = []
 
@@ -60,34 +54,36 @@ if "index" not in st.session_state:
 if "ready" not in st.session_state:
     st.session_state.ready = False
 
-# ================= PDF SAFE =================
+# ================= PDF =================
 def extract_pdf(file):
     try:
         reader = PdfReader(file)
         text = ""
-        for i, page in enumerate(reader.pages):
-            text += page.extract_text() or ""
+        for p in reader.pages:
+            text += p.extract_text() or ""
         return text
     except:
         return ""
 
 # ================= CHUNK =================
-def chunk_text(text, size=400):
+def chunk_text(text):
     words = text.split()
-    return [" ".join(words[i:i+size]) for i in range(0, len(words), size)]
+    return [" ".join(words[i:i+400]) for i in range(0, len(words), 400)]
 
 # ================= INDEX =================
 def build_index(text):
     chunks = chunk_text(text)
     emb = embedder.encode(chunks).astype("float32")
+
     index = faiss.IndexFlatL2(emb.shape[1])
     index.add(emb)
+
     return chunks, index
 
-def retrieve(query, chunks, index):
-    qv = embedder.encode([query]).astype("float32")
-    _, I = index.search(qv, 4)
-    return [chunks[i] for i in I[0]]
+def retrieve(q):
+    qv = embedder.encode([q]).astype("float32")
+    _, I = st.session_state.index.search(qv, 4)
+    return [st.session_state.chunks[i] for i in I[0]]
 
 # ================= UPLOAD =================
 file = st.file_uploader("📄 Upload PDF")
@@ -98,42 +94,32 @@ if file:
     if len(text.strip()) > 50:
         chunks, index = build_index(text)
 
+        st.session_state.text = text
         st.session_state.chunks = chunks
         st.session_state.index = index
         st.session_state.ready = True
 
-        st.success("⚡ Document Indexed Successfully")
-    else:
-        st.session_state.ready = False
-        st.error("❌ PDF unreadable or empty")
+        st.success("⚡ Document Ready")
 
-# ================= INPUT =================
-query = st.text_input("💬 Ask Legal Question")
+# ================= QUERY =================
+query = st.text_input("💬 Ask Question")
 
-# ================= MAIN ASK =================
+# ================= ASK =================
 if st.button("⚡ Ask AI"):
 
     if not st.session_state.ready:
-        st.warning("⚠️ Upload valid PDF first")
-
+        st.warning("Upload PDF first")
     else:
-        ctx = retrieve(query, st.session_state.chunks, st.session_state.index)
-        context = "\n\n".join(ctx)
-
+        ctx = retrieve(query)
         prompt = f"""
-You are a legal AI assistant.
-
 Context:
-{context}
+{chr(10).join(ctx)}
 
 Question:
 {query}
-
-Give structured legal answer.
 """
 
         res = model.generate_content(prompt).text
-        st.markdown("### 🧠 Answer")
         st.write(res)
 
 # ================= SUMMARY =================
@@ -141,8 +127,7 @@ if st.button("📌 Summary"):
 
     if st.session_state.ready:
         text = "\n".join(st.session_state.chunks[:10])
-        res = model.generate_content(f"Summarize:\n{text}").text
-        st.write(res)
+        st.write(model.generate_content(f"Summarize:\n{text}").text)
     else:
         st.warning("Upload PDF first")
 
@@ -151,8 +136,7 @@ if st.button("⚠️ Risk Analysis"):
 
     if st.session_state.ready:
         text = "\n".join(st.session_state.chunks[:15])
-        res = model.generate_content(f"Classify risks:\n{text}").text
-        st.write(res)
+        st.write(model.generate_content(f"Risk classify:\n{text}").text)
     else:
         st.warning("Upload PDF first")
 
@@ -161,31 +145,27 @@ if st.button("✅ Checklist"):
 
     if st.session_state.ready:
         text = "\n".join(st.session_state.chunks[:15])
-        res = model.generate_content(f"Create checklist:\n{text}").text
-        st.write(res)
+        st.write(model.generate_content(f"Checklist:\n{text}").text)
     else:
         st.warning("Upload PDF first")
 
-# ================= COMPARE =================
-file2 = st.file_uploader("📄 Upload second PDF")
+# ================= COMPARE (FIXED STATE SAFE) =================
+file2 = st.file_uploader("📄 Upload Second PDF")
 
-if file and file2:
+if st.session_state.ready and file2 is not None:
 
-    t1 = extract_pdf(file)
     t2 = extract_pdf(file2)
 
-    if len(t1) < 50 or len(t2) < 50:
-        st.error("❌ One PDF is invalid")
+    if len(st.session_state.text) < 50 or len(t2) < 50:
+        st.error("Invalid PDF")
     else:
         prompt = f"""
-Compare:
+Compare Documents:
 
 OLD:
-{t1[:2000]}
+{st.session_state.text[:2000]}
 
 NEW:
 {t2[:2000]}
 """
-        res = model.generate_content(prompt).text
-        st.markdown("### 📊 Comparison")
-        st.write(res)
+        st.write(model.generate_content(prompt).text)
