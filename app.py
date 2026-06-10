@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 import numpy as np
 
 # ================= CONFIG =================
-genai.configure(api_key=st.secrets["AQ.Ab8RN6IdFUKndHp-WZYGaT52rieYf2H_wG0IVKQOefD4Yb6ZwwY"])
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
