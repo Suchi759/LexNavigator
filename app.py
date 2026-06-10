@@ -7,9 +7,10 @@ import faiss
 from PyPDF2 import PdfReader
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
+import os
 
 # ================= GEMINI =================
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+genai.configure(api_key=os.getenv("GEMINI_API_KEY", st.secrets.get("GEMINI_API_KEY", "")))
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ================= EMBEDDING MODEL =================
