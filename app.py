@@ -1,9 +1,6 @@
 # =========================
 # LEXNAVIGATOR ⚖️ FULL CINEMATIC RAG APP (FIXED ONE CELL)
 # =========================
-
-!pip -q install streamlit google-generativeai faiss-cpu sentence-transformers PyPDF2 numpy pyngrok gtts SpeechRecognition pydub
-
 import os
 import threading
 import time
