@@ -6,8 +6,7 @@ import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 
 # ================= GEMINI =================
-genai.configure(api_key=st.secrets["AIzaSyD3mX-FAKEKEY1234567890abcdefGhIjKlMnOpQrStUvWxYz
-"])
+genai.configure(api_key=st.secrets["AQ.Ab8RN6IdFUKndHp-WZYGaT52rieYf2H_wG0IVKQOefD4Yb6Zww"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
