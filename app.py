@@ -4,24 +4,26 @@ from PyPDF2 import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import time
+from io import BytesIO
+from reportlab.pdfgen import canvas
 
 # ================= CONFIG =================
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
-
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# ================= UI =================
-st.set_page_config(page_title="LexNavigator⚖️", layout="wide")
+# ================= PAGE =================
+st.set_page_config(page_title="LexNavigator PRO ⚖️", layout="wide")
 
+# ================= CINEMATIC DARK UI =================
 st.markdown("""
 <style>
 .stApp {
-    background: radial-gradient(circle at top, #050816, #020409, #000);
-    color: white;
+    background: radial-gradient(circle at top, #0b1220, #050814, #02030a);
+    color: #e5e7eb;
 }
 
-/* Title */
+/* TITLE */
 h1 {
     text-align:center;
     font-size: 3rem;
@@ -30,49 +32,58 @@ h1 {
     -webkit-text-fill-color: transparent;
 }
 
-/* chat bubbles */
+/* CHAT BUBBLES */
 .user {
     background:#1e293b;
     padding:10px;
     border-radius:12px;
-    margin:5px;
+    margin:6px;
 }
 .ai {
     background:linear-gradient(135deg,#0f172a,#1e293b);
     padding:10px;
     border-radius:12px;
     border-left:3px solid #00d4ff;
-    margin:5px;
+    margin:6px;
 }
 
-/* buttons */
+/* BUTTONS */
 .stButton>button {
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     color:white;
     border-radius:10px;
+    font-weight:bold;
+}
+
+/* SIDEBAR */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg,#020617,#050816);
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚖️ LexNavigator ")
+st.title("⚖️ LexNavigator AI PRO")
 
-# ================= SESSION MEMORY =================
+# ================= SESSION =================
 if "chat" not in st.session_state:
     st.session_state.chat = []
 
 if "docs" not in st.session_state:
     st.session_state.docs = {}
 
-# ================= PDF FUNCTIONS =================
+# ================= PDF =================
 def extract_pdf(file):
-    reader = PdfReader(file)
-    text = ""
-    for p in reader.pages:
-        text += p.extract_text() or ""
-    return text
+    try:
+        reader = PdfReader(file)
+        text = ""
+        for p in reader.pages:
+            text += p.extract_text() or ""
+        return text
+    except:
+        return ""
 
 def chunk(text):
-    return text.split(". ")
+    return [c.strip() for c in text.split(". ") if c.strip()]
 
 def retrieve(query, chunks):
     if not chunks:
@@ -84,7 +95,7 @@ def retrieve(query, chunks):
     return [chunks[i] for i in top]
 
 # ================= STREAMING EFFECT =================
-def stream(text):
+def stream_text(text):
     box = st.empty()
     out = ""
     for c in text:
@@ -92,18 +103,17 @@ def stream(text):
         box.markdown(out)
         time.sleep(0.01)
 
-# ================= SIDEBAR =================
+# ================= SIDEBAR VAULT =================
 st.sidebar.title("📂 Document Vault")
 
-files = st.sidebar.file_uploader(
-    "Upload PDFs",
-    type=["pdf"],
-    accept_multiple_files=True
+uploaded_files = st.sidebar.file_uploader(
+    "Upload PDFs", type=["pdf"], accept_multiple_files=True
 )
 
-if files:
-    for f in files:
-        st.session_state.docs[f.name] = chunk(extract_pdf(f))
+if uploaded_files:
+    for f in uploaded_files:
+        text = extract_pdf(f)
+        st.session_state.docs[f.name] = chunk(text)
 
 st.sidebar.write("Stored Docs:")
 for name in st.session_state.docs:
@@ -112,22 +122,11 @@ for name in st.session_state.docs:
 # ================= LANGUAGE =================
 lang = st.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
 
-# ================= CHAT UI =================
-st.subheader("💬 Chat")
-
-for role, msg in st.session_state.chat:
-    if role == "user":
-        st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
-    else:
-        st.markdown(f"<div class='ai'>⚖️ {msg}</div>", unsafe_allow_html=True)
-
-query = st.text_input("Ask something legal...")
-
 # ================= AI ENGINE =================
 def ask_ai(query):
     all_chunks = []
-    for doc in st.session_state.docs.values():
-        all_chunks.extend(doc)
+    for d in st.session_state.docs.values():
+        all_chunks.extend(d)
 
     context = retrieve(query, all_chunks)
 
@@ -136,7 +135,7 @@ You are a senior legal AI assistant.
 
 Language: {lang}
 
-Provide:
+Give:
 1. Clear Answer
 2. Legal reasoning
 3. Risk level
@@ -149,8 +148,18 @@ Question:
 {query}
 """
 
-    res = model.generate_content(prompt).text
-    return res
+    return model.generate_content(prompt).text
+
+# ================= CHAT UI =================
+st.subheader("💬 Chat Assistant")
+
+for role, msg in st.session_state.chat:
+    if role == "user":
+        st.markdown(f"<div class='user'>🧑 {msg}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown(f"<div class='ai'>⚖️ {msg}</div>", unsafe_allow_html=True)
+
+query = st.text_input("Ask your legal question")
 
 # ================= SEND =================
 if st.button("⚡ Send") and query:
@@ -160,9 +169,9 @@ if st.button("⚡ Send") and query:
 
     st.session_state.chat.append(("ai", response))
 
-    stream(response)
+    stream_text(response)
 
-# ================= FILE COMPARISON =================
+# ================= COMPARE DOCUMENTS =================
 st.markdown("---")
 st.subheader("📄 Compare Documents")
 
@@ -170,17 +179,17 @@ file1 = st.file_uploader("Upload OLD PDF", type=["pdf"])
 file2 = st.file_uploader("Upload NEW PDF", type=["pdf"])
 
 if file1 and file2:
-    t1 = extract_pdf(file1)
-    t2 = extract_pdf(file2)
+    old_text = extract_pdf(file1)[:2000]
+    new_text = extract_pdf(file2)[:2000]
 
     compare_prompt = f"""
-Compare these legal documents:
+Compare legal documents:
 
 OLD:
-{t1[:2000]}
+{old_text}
 
 NEW:
-{t2[:2000]}
+{new_text}
 
 Show:
 - Changes
@@ -189,6 +198,31 @@ Show:
 - Risk impact
 """
 
-    if st.button("Compare"):
-        res = model.generate_content(compare_prompt).text
-        st.write(res)
+    if st.button("Compare Now"):
+        result = model.generate_content(compare_prompt).text
+        st.markdown("### 📊 Comparison Result")
+        st.write(result)
+
+# ================= PDF REPORT =================
+def make_pdf(text):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer)
+    c.drawString(50, 800, "LexNavigator Legal Report")
+    y = 770
+    for line in text.split("\n")[:40]:
+        c.drawString(50, y, line[:100])
+        y -= 15
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+if st.session_state.chat:
+    full = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
+    pdf = make_pdf(full)
+
+    st.download_button(
+        "📄 Download Legal Report",
+        pdf,
+        file_name="legal_report.pdf",
+        mime="application/pdf"
+    )
