@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import faiss
-from pypdf import PdfReader
+from PyPDF2 import PdfReader
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 
@@ -14,7 +14,7 @@ embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= PAGE CONFIG =================
 st.set_page_config(
-    page_title="LexNavigator  ⚖️",
+    page_title="LexNavigator ⚖️",
     layout="wide",
     page_icon="⚖️"
 )
