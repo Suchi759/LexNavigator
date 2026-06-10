@@ -6,6 +6,9 @@ import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 
 # ================= GEMINI =================
+import streamlit as st
+import google.generativeai as genai
+
 genai.configure(api_key=st.secrets["AQ.Ab8RN6IdFUKndHp-WZYGaT52rieYf2H_wG0IVKQOefD4Yb6Zww"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
