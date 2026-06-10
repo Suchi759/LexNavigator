@@ -3,11 +3,12 @@ import google.generativeai as genai
 from PyPDF2 import PdfReader
 from sentence_transformers import SentenceTransformer
 import numpy as np
+from io import BytesIO
+from reportlab.pdfgen import canvas
 
 # ================= CONFIG =================
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
-
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
 # ================= UI =================
@@ -19,6 +20,7 @@ st.markdown("""
     background: radial-gradient(circle at top, #050816, #020409, #000);
     color: white;
 }
+
 h1 {
     text-align:center;
     font-size: 3rem;
@@ -26,125 +28,165 @@ h1 {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
+
+/* chat bubbles */
+.chat-user {
+    background: #1e293b;
+    padding: 10px;
+    border-radius: 12px;
+    margin: 5px;
+}
+
+.chat-ai {
+    background: linear-gradient(135deg,#0f172a,#1e293b);
+    padding: 10px;
+    border-radius: 12px;
+    margin: 5px;
+    border-left: 3px solid #00d4ff;
+}
+
+/* buttons */
 .stButton>button {
     background: linear-gradient(90deg,#00d4ff,#a855f7,#ff3d81);
     color: white;
     border-radius: 10px;
-    padding: 0.5rem 1rem;
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("⚖️ LexNavigator AI")
+st.title("⚖️ LexNavigator")
+
+# ================= SESSION =================
+if "chat" not in st.session_state:
+    st.session_state.chat = []
+
+if "docs" not in st.session_state:
+    st.session_state.docs = {}
 
 # ================= PDF =================
 def extract_pdf(file):
-    try:
-        reader = PdfReader(file)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text
-        return text
-    except:
-        return ""
+    reader = PdfReader(file)
+    text = ""
+    for p in reader.pages:
+        text += p.extract_text() or ""
+    return text
 
-def chunk_text(text, size=300):
-    words = text.split()
-    return [" ".join(words[i:i+size]) for i in range(0, len(words), size)]
+def chunk(text):
+    return text.split(". ")
 
-# ================= SIMPLE RETRIEVAL (SAFE MODE) =================
-def get_relevant_chunks(chunks, query):
+def embed(text_list):
+    return embedder.encode(text_list)
+
+def retrieve(query, chunks):
     if not chunks:
         return []
+    q = embedder.encode([query])[0]
+    c = embedder.encode(chunks)
+    scores = np.dot(c, q)
+    top = np.argsort(scores)[-4:][::-1]
+    return [chunks[i] for i in top]
 
-    q_emb = embedder.encode([query])[0]
-    c_emb = embedder.encode(chunks)
+# ================= STREAMING EFFECT =================
+def stream_text(text):
+    placeholder = st.empty()
+    out = ""
+    for c in text:
+        out += c
+        placeholder.markdown(out)
+    return out
 
-    scores = np.dot(c_emb, q_emb)
-    top_idx = np.argsort(scores)[-3:][::-1]
+# ================= SIDEBAR MEMORY =================
+st.sidebar.title("📚 Document Memory")
 
-    return [chunks[i] for i in top_idx]
+uploaded_files = st.sidebar.file_uploader(
+    "Upload PDFs", type=["pdf"], accept_multiple_files=True
+)
 
-# ================= SESSION =================
-if "chunks" not in st.session_state:
-    st.session_state.chunks = []
+if uploaded_files:
+    for file in uploaded_files:
+        text = extract_pdf(file)
+        st.session_state.docs[file.name] = chunk(text)
 
-# ================= UPLOAD =================
-file = st.file_uploader("📄 Upload PDF")
+st.sidebar.write("Stored Docs:")
+for k in st.session_state.docs.keys():
+    st.sidebar.write("📄", k)
 
-if file:
-    text = extract_pdf(file)
-    chunks = chunk_text(text)
+# ================= CHAT UI =================
+st.subheader("💬 Chat Assistant")
 
-    st.session_state.chunks = chunks
-
-    st.success("PDF loaded successfully ⚡")
-
-# ================= INPUT =================
-query = st.text_input("💬 Ask your question")
-
-# ================= ASK =================
-if st.button("Ask AI ⚖️"):
-
-    if not st.session_state.chunks:
-        st.warning("Please upload a PDF first")
+for role, msg in st.session_state.chat:
+    if role == "user":
+        st.markdown(f"<div class='chat-user'>🧑 {msg}</div>", unsafe_allow_html=True)
     else:
-        context = get_relevant_chunks(st.session_state.chunks, query)
-        context_text = "\n\n".join(context)
+        st.markdown(f"<div class='chat-ai'>⚖️ {msg}</div>", unsafe_allow_html=True)
 
-        prompt = f"""
-You are a legal AI assistant.
+query = st.text_input("Ask question")
+
+# ================= CLAUSE EXTRACTION =================
+def extract_clauses(text):
+    prompt = f"""
+Extract legal clauses in bullet format:
+{text}
+"""
+    return model.generate_content(prompt).text
+
+# ================= LEGAL RESPONSE =================
+def ask_ai(query):
+    all_chunks = []
+    for doc in st.session_state.docs.values():
+        all_chunks.extend(doc)
+
+    context = retrieve(query, all_chunks)
+
+    prompt = f"""
+You are a senior legal AI assistant.
+
+Provide:
+1. Structured Answer
+2. Legal reasoning
+3. Risk level (High/Medium/Low)
+4. Important clauses
 
 Context:
-{context_text}
+{context}
 
 Question:
 {query}
-
-Give:
-- Clear answer
-- Legal explanation
 """
 
-        try:
-            response = model.generate_content(prompt).text
-            st.markdown("### 🧠 Answer")
-            st.write(response)
+    return model.generate_content(prompt).text
 
-        except Exception as e:
-            st.error(f"Gemini Error: {str(e)}")
+# ================= ACTION =================
+if st.button("⚡ Send") and query:
 
-# ================= SUMMARY =================
-if st.button("📌 Summary"):
-    if st.session_state.chunks:
-        text = "\n".join(st.session_state.chunks[:10])
-        prompt = "Summarize this legal document:\n" + text
+    st.session_state.chat.append(("user", query))
 
-        try:
-            st.write(model.generate_content(prompt).text)
-        except Exception as e:
-            st.error(str(e))
+    response = ask_ai(query)
 
-# ================= RISK =================
-if st.button("⚠️ Risk Analysis"):
-    if st.session_state.chunks:
-        text = "\n".join(st.session_state.chunks[:15])
-        prompt = "Classify legal risk (High, Medium, Low):\n" + text
+    st.session_state.chat.append(("ai", response))
 
-        try:
-            st.write(model.generate_content(prompt).text)
-        except Exception as e:
-            st.error(str(e))
+    stream_text(response)
 
-# ================= CHECKLIST =================
-if st.button("✅ Checklist"):
-    if st.session_state.chunks:
-        text = "\n".join(st.session_state.chunks[:15])
-        prompt = "Create compliance checklist:\n" + text
+# ================= REPORT DOWNLOAD =================
+def make_pdf(text):
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer)
+    c.drawString(50, 800, "LexNavigator Legal Report")
+    y = 760
+    for line in text.split("\n")[:40]:
+        c.drawString(50, y, line[:100])
+        y -= 15
+    c.save()
+    buffer.seek(0)
+    return buffer
 
-        try:
-            st.write(model.generate_content(prompt).text)
-        except Exception as e:
-            st.error(str(e))
+if st.session_state.chat:
+    full_text = "\n".join([m[1] for m in st.session_state.chat if m[0] == "ai"])
+    pdf = make_pdf(full_text)
+
+    st.download_button(
+        "📄 Download Legal Report",
+        pdf,
+        file_name="legal_report.pdf",
+        mime="application/pdf"
+    )
