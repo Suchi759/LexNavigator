@@ -4,6 +4,7 @@ import faiss
 from PyPDF2 import PdfReader
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
+import time
 
 # ================= GEMINI =================
 genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -19,121 +20,114 @@ st.set_page_config(
     page_icon="⚖️"
 )
 
-# ================= ULTRA CINEMATIC UI =================
+# ================= 🎨 UNIQUE CINEMATIC COLOR THEME =================
 st.markdown("""
 <style>
 
-/* 🌌 DARK NEON BACKGROUND */
+/* 🌌 NEW COLOR SYSTEM (MIDNIGHT + AMBER + CYAN + SAND) */
 .stApp {
-    background: radial-gradient(circle at top, #050816, #020409, #000000);
+    background: linear-gradient(135deg, #0a0f1c, #111827, #1b1f2a);
     color: #e5e7eb;
 }
 
-/* ⚖️ HERO TITLE */
-.main-header {
+/* 🏛 HEADER */
+.main-title {
     text-align: center;
-    font-size: 3.3rem;
+    font-size: 3.2rem;
     font-weight: 900;
-    background: linear-gradient(90deg, #00d4ff, #a855f7, #ff3d81);
+    background: linear-gradient(90deg, #fbbf24, #38bdf8, #a78bfa, #f97316);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 40px rgba(0,212,255,0.25);
+    text-shadow: 0 0 35px rgba(251,191,36,0.2);
 }
 
-/* SUBTITLE */
-.sub-header {
-    text-align: center;
-    color: #94a3b8;
-    margin-bottom: 25px;
+/* 🧾 SIDEBAR MEMORY */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0b1220, #111827);
 }
 
-/* 🧊 GLASS CARDS */
+/* 🧊 GLASS CARD */
 .glass {
-    background: rgba(10, 14, 30, 0.7);
-    border: 1px solid rgba(0, 212, 255, 0.15);
+    background: rgba(17, 24, 39, 0.65);
+    border: 1px solid rgba(251, 191, 36, 0.15);
     border-radius: 18px;
     padding: 18px;
-    backdrop-filter: blur(14px);
-    box-shadow: 0 0 35px rgba(168,85,247,0.08);
+    backdrop-filter: blur(12px);
 }
 
 /* 🔘 BUTTONS */
 .stButton>button {
-    background: linear-gradient(135deg, #00d4ff, #a855f7, #ff3d81);
-    color: white;
+    background: linear-gradient(135deg, #fbbf24, #38bdf8, #a78bfa);
+    color: #0b0f1c;
     border-radius: 12px;
-    padding: 0.65rem 1.2rem;
     font-weight: 700;
+    padding: 0.6rem 1.2rem;
     border: none;
-    box-shadow: 0 0 25px rgba(168,85,247,0.3);
-    transition: 0.3s ease;
+    box-shadow: 0 0 18px rgba(251,191,36,0.2);
+    transition: 0.3s;
 }
 
 .stButton>button:hover {
     transform: scale(1.05);
-    box-shadow: 0 0 40px rgba(0,212,255,0.4);
 }
 
-/* 📄 INPUT */
-input, textarea {
-    background-color: #0b1020 !important;
-    color: white !important;
-    border-radius: 12px !important;
-    border: 1px solid #1f2a44 !important;
-}
-
-/* 📊 SIDEBAR */
-section[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #020409, #050816);
-}
-
-/* AI RESPONSE BOX */
+/* 💬 CHAT BOX */
 .ai-box {
-    background: linear-gradient(145deg, rgba(15,23,42,0.8), rgba(2,6,23,0.8));
-    border-left: 3px solid #00d4ff;
-    padding: 18px;
-    border-radius: 14px;
-    margin-top: 10px;
+    background: rgba(17, 24, 39, 0.85);
+    border-left: 3px solid #fbbf24;
+    padding: 16px;
+    border-radius: 12px;
+}
+
+/* INPUT */
+input, textarea {
+    background-color: #111827 !important;
+    color: white !important;
+    border-radius: 10px !important;
+    border: 1px solid #374151 !important;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
-# ================= HEADER =================
-st.markdown('<div class="main-header">⚖️ LEXNAVIGATOR </div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Cinematic Legal Intelligence Engine • RAG Document Assistant</div>', unsafe_allow_html=True)
+# ================= TITLE =================
+st.markdown('<div class="main-title">⚖️ LEXNAVIGATOR </div>', unsafe_allow_html=True)
 
-st.markdown("---")
+# ================= SESSION MEMORY =================
+if "docs" not in st.session_state:
+    st.session_state.docs = []
 
-# ================= SAFE PDF READER =================
+if "chunks" not in st.session_state:
+    st.session_state.chunks = []
+
+if "index" not in st.session_state:
+    st.session_state.index = None
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# ================= PDF SAFE READ =================
 def extract_pdf(file):
     try:
         reader = PdfReader(file)
         text = ""
-
         for i, page in enumerate(reader.pages):
-            page_text = page.extract_text()
-            if page_text:
-                text += f"[Page {i+1}] {page_text}"
-
-        return text if text.strip() else "⚠️ No readable text found in PDF."
-
-    except Exception as e:
-        return f"⚠️ PDF ERROR: {str(e)}"
+            text += f"[Page {i+1}] {page.extract_text() or ''}"
+        return text
+    except:
+        return ""
 
 # ================= CHUNKING =================
 def chunk_text(text, size=400):
     words = text.split()
     return [" ".join(words[i:i+size]) for i in range(0, len(words), size)]
 
-# ================= FAISS INDEX =================
+# ================= INDEX =================
 def build_index(text):
     chunks = chunk_text(text)
     emb = embedder.encode(chunks).astype("float32")
-
     index = faiss.IndexFlatL2(emb.shape[1])
     index.add(emb)
-
     return chunks, index
 
 def retrieve(query, chunks, index):
@@ -141,36 +135,49 @@ def retrieve(query, chunks, index):
     _, I = index.search(qv, 4)
     return [chunks[i] for i in I[0]]
 
-# ================= SESSION STATE =================
-if "chunks" not in st.session_state:
-    st.session_state.chunks = []
-if "index" not in st.session_state:
-    st.session_state.index = None
+# ================= SIDEBAR MEMORY =================
+with st.sidebar:
+    st.header("📚 Document Memory")
+
+    for i, doc in enumerate(st.session_state.docs[-5:]):
+        st.write(f"📄 {doc}")
 
 # ================= UPLOAD =================
 st.markdown('<div class="glass">', unsafe_allow_html=True)
+
 file = st.file_uploader("📄 Upload Legal / GST / Contract PDF")
-st.markdown("</div>", unsafe_allow_html=True)
 
 if file:
     text = extract_pdf(file)
-    chunks, index = build_index(text)
 
-    st.session_state.chunks = chunks
-    st.session_state.index = index
+    if len(text) > 50:
+        chunks, index = build_index(text)
 
-    st.success("⚡ Document Indexed Successfully")
+        st.session_state.chunks = chunks
+        st.session_state.index = index
+        st.session_state.docs.append(file.name)
 
-# ================= INPUT =================
-st.markdown('<div class="glass">', unsafe_allow_html=True)
-
-query = st.text_input("💬 Ask your legal question")
-lang = st.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
+        st.success("⚡ Document Indexed ")
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ================= AI QUERY =================
-if st.button("⚡ Analyze with AI"):
+# ================= QUERY =================
+query = st.text_input("💬 Ask your question")
+
+# ================= STREAMING AI =================
+def stream_response(text):
+    placeholder = st.empty()
+    output = ""
+
+    for char in text:
+        output += char
+        time.sleep(0.01)
+        placeholder.markdown(f"""
+        <div class="ai-box">{output}▌</div>
+        """, unsafe_allow_html=True)
+
+# ================= ASK AI =================
+if st.button("⚡ Ask AI"):
 
     if st.session_state.index:
 
@@ -186,65 +193,39 @@ Context:
 Question:
 {query}
 
-Return:
-- Structured Answer
-- Legal Sections
-- Risk Explanation
+Give structured legal explanation.
 """
 
-        with st.spinner("⚡ Analyzing Legal Document..."):
+        with st.spinner("Thinking... ⚖️"):
             res = model.generate_content(prompt).text
 
-            if lang != "English":
-                res = model.generate_content(f"Translate to {lang}: {res}").text
+        st.session_state.chat_history.append((query, res))
 
-        st.markdown("### 🧠 AI LEGAL ANALYSIS")
+        stream_response(res)
 
-        st.markdown(f"""
-        <div class="ai-box">
-        {res}
-        </div>
-        """, unsafe_allow_html=True)
+# ================= CHAT HISTORY =================
+st.markdown("### 🧠 Conversation Memory")
 
-# ================= SUMMARY =================
-if st.button("📌 Generate Summary") and st.session_state.chunks:
-    text = "\n".join(st.session_state.chunks[:10])
-    prompt = f"Summarize legal document:\n{text}"
-    st.write(model.generate_content(prompt).text)
+for q, a in st.session_state.chat_history[-5:]:
+    st.markdown(f"**🧑 You:** {q}")
+    st.markdown(f"**⚖️ AI:** {a}")
+    st.markdown("---")
 
-# ================= RISK =================
-if st.button("⚠️ Risk Analysis") and st.session_state.chunks:
-    text = "\n".join(st.session_state.chunks[:15])
-    prompt = f"Classify legal risk:\n{text}"
-    st.write(model.generate_content(prompt).text)
+# ================= FEATURES =================
+col1, col2, col3 = st.columns(3)
 
-# ================= CHECKLIST =================
-if st.button("✅ Compliance Checklist") and st.session_state.chunks:
-    text = "\n".join(st.session_state.chunks[:15])
-    prompt = f"Create GST compliance checklist:\n{text}"
-    st.write(model.generate_content(prompt).text)
+with col1:
+    if st.button("📌 Summary") and st.session_state.index:
+        text = "\n".join(st.session_state.chunks[:10])
+        res = model.generate_content(f"Summarize:\n{text}").text
+        st.write(res)
 
-# ================= COMPARE =================
-file2 = st.file_uploader("📄 Upload second document (Compare)", type=["pdf"])
+with col2:
+    if st.button("⚠️ Risk") and st.session_state.index:
+        text = "\n".join(st.session_state.chunks[:15])
+        res = model.generate_content(f"Classify risks:\n{text}").text
+        st.write(res)
 
-if file and file2:
-    t1 = extract_pdf(file)
-    t2 = extract_pdf(file2)
-
-    prompt = f"""
-Compare Documents:
-
-OLD:
-{t1[:2000]}
-
-NEW:
-{t2[:2000]}
-
-Show:
-- Changes
-- New rules
-- Removed clauses
-"""
-
-    st.markdown("### 📊 Document Comparison")
-    st.write(model.generate_content(prompt).text)
+with col3:
+    if st.button("📊 Compare") and st.session_state.index:
+        st.info("Upload second file in sidebar uploader (future upgrade)")
