@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import faiss
-import PyPDF2
+from pypdf import PdfReader
 import google.generativeai as genai
 from sentence_transformers import SentenceTransformer
 
@@ -12,80 +12,87 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 # ================= EMBEDDINGS =================
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 
-# ================= CINEMATIC UI =================
+# ================= PAGE CONFIG =================
 st.set_page_config(
-    page_title="LexNavigator AI ⚖️",
+    page_title="LexNavigator  ⚖️",
     layout="wide",
     page_icon="⚖️"
 )
 
+# ================= ULTRA CINEMATIC UI =================
 st.markdown("""
 <style>
 
-/* BACKGROUND */
+/* 🌌 DARK NEON BACKGROUND */
 .stApp {
-    background: radial-gradient(circle at 20% 20%, #0b1220, #05070f 40%, #02030a);
+    background: radial-gradient(circle at top, #050816, #020409, #000000);
     color: #e5e7eb;
 }
 
-/* HEADER */
+/* ⚖️ HERO TITLE */
 .main-header {
     text-align: center;
-    font-size: 3rem;
-    font-weight: 800;
-    background: linear-gradient(90deg, #38bdf8, #a78bfa, #22d3ee);
+    font-size: 3.3rem;
+    font-weight: 900;
+    background: linear-gradient(90deg, #00d4ff, #a855f7, #ff3d81);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 30px rgba(56,189,248,0.3);
+    text-shadow: 0 0 40px rgba(0,212,255,0.25);
 }
 
 /* SUBTITLE */
 .sub-header {
     text-align: center;
     color: #94a3b8;
-    margin-bottom: 20px;
+    margin-bottom: 25px;
 }
 
-/* GLASS CARD */
+/* 🧊 GLASS CARDS */
 .glass {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 16px;
+    background: rgba(10, 14, 30, 0.7);
+    border: 1px solid rgba(0, 212, 255, 0.15);
+    border-radius: 18px;
     padding: 18px;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 0 25px rgba(56,189,248,0.08);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 0 35px rgba(168,85,247,0.08);
 }
 
-/* INPUT */
-input, textarea {
-    background-color: #0f172a !important;
-    color: white !important;
-    border-radius: 12px !important;
-    border: 1px solid #334155 !important;
-}
-
-/* BUTTON */
+/* 🔘 BUTTONS */
 .stButton>button {
-    background: linear-gradient(135deg, #0ea5e9, #8b5cf6);
+    background: linear-gradient(135deg, #00d4ff, #a855f7, #ff3d81);
     color: white;
     border-radius: 12px;
-    padding: 0.6rem 1.2rem;
-    font-weight: 600;
-    box-shadow: 0 0 20px rgba(139,92,246,0.3);
-    transition: 0.3s;
+    padding: 0.65rem 1.2rem;
+    font-weight: 700;
+    border: none;
+    box-shadow: 0 0 25px rgba(168,85,247,0.3);
+    transition: 0.3s ease;
 }
 
 .stButton>button:hover {
-    transform: scale(1.03);
-    box-shadow: 0 0 30px rgba(14,165,233,0.5);
+    transform: scale(1.05);
+    box-shadow: 0 0 40px rgba(0,212,255,0.4);
 }
 
-/* AI BOX */
+/* 📄 INPUT */
+input, textarea {
+    background-color: #0b1020 !important;
+    color: white !important;
+    border-radius: 12px !important;
+    border: 1px solid #1f2a44 !important;
+}
+
+/* 📊 SIDEBAR */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #020409, #050816);
+}
+
+/* AI RESPONSE BOX */
 .ai-box {
-    background: linear-gradient(145deg, rgba(15,23,42,0.7), rgba(2,6,23,0.7));
-    border-left: 3px solid #38bdf8;
+    background: linear-gradient(145deg, rgba(15,23,42,0.8), rgba(2,6,23,0.8));
+    border-left: 3px solid #00d4ff;
     padding: 18px;
-    border-radius: 12px;
+    border-radius: 14px;
     margin-top: 10px;
 }
 
@@ -93,25 +100,33 @@ input, textarea {
 """, unsafe_allow_html=True)
 
 # ================= HEADER =================
-st.markdown('<div class="main-header">⚖️ LEXNAVIGATOR AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header"> Legal Intelligence Engine • RAG Document Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">⚖️ LEXNAVIGATOR </div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Cinematic Legal Intelligence Engine • RAG Document Assistant</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
-# ================= PDF FUNCTIONS =================
+# ================= SAFE PDF READER =================
 def extract_pdf(file):
-    pdf = PyPDF2.PdfReader(file)
-    text = ""
-    for i, p in enumerate(pdf.pages):
-        t = p.extract_text()
-        if t:
-            text += f"[Page {i+1}] {t}"
-    return text
+    try:
+        reader = PdfReader(file)
+        text = ""
 
+        for i, page in enumerate(reader.pages):
+            page_text = page.extract_text()
+            if page_text:
+                text += f"[Page {i+1}] {page_text}"
+
+        return text if text.strip() else "⚠️ No readable text found in PDF."
+
+    except Exception as e:
+        return f"⚠️ PDF ERROR: {str(e)}"
+
+# ================= CHUNKING =================
 def chunk_text(text, size=400):
     words = text.split()
     return [" ".join(words[i:i+size]) for i in range(0, len(words), size)]
 
+# ================= FAISS INDEX =================
 def build_index(text):
     chunks = chunk_text(text)
     emb = embedder.encode(chunks).astype("float32")
@@ -126,7 +141,7 @@ def retrieve(query, chunks, index):
     _, I = index.search(qv, 4)
     return [chunks[i] for i in I[0]]
 
-# ================= SESSION =================
+# ================= SESSION STATE =================
 if "chunks" not in st.session_state:
     st.session_state.chunks = []
 if "index" not in st.session_state:
@@ -134,7 +149,7 @@ if "index" not in st.session_state:
 
 # ================= UPLOAD =================
 st.markdown('<div class="glass">', unsafe_allow_html=True)
-file = st.file_uploader("📄 Upload Legal / GST / Policy Document")
+file = st.file_uploader("📄 Upload Legal / GST / Contract PDF")
 st.markdown("</div>", unsafe_allow_html=True)
 
 if file:
@@ -144,7 +159,7 @@ if file:
     st.session_state.chunks = chunks
     st.session_state.index = index
 
-    st.success("Document Indexed ⚡")
+    st.success("⚡ Document Indexed Successfully")
 
 # ================= INPUT =================
 st.markdown('<div class="glass">', unsafe_allow_html=True)
@@ -154,7 +169,7 @@ lang = st.selectbox("🌐 Language", ["English", "Hindi", "Telugu"])
 
 st.markdown("</div>", unsafe_allow_html=True)
 
-# ================= ASK AI =================
+# ================= AI QUERY =================
 if st.button("⚡ Analyze with AI"):
 
     if st.session_state.index:
@@ -173,8 +188,8 @@ Question:
 
 Return:
 - Structured Answer
-- Legal Section References
-- Risk Notes
+- Legal Sections
+- Risk Explanation
 """
 
         with st.spinner("⚡ Analyzing Legal Document..."):
@@ -194,13 +209,13 @@ Return:
 # ================= SUMMARY =================
 if st.button("📌 Generate Summary") and st.session_state.chunks:
     text = "\n".join(st.session_state.chunks[:10])
-    prompt = f"Summarize key legal points:\n{text}"
+    prompt = f"Summarize legal document:\n{text}"
     st.write(model.generate_content(prompt).text)
 
 # ================= RISK =================
 if st.button("⚠️ Risk Analysis") and st.session_state.chunks:
     text = "\n".join(st.session_state.chunks[:15])
-    prompt = f"Classify risk levels:\n{text}"
+    prompt = f"Classify legal risk:\n{text}"
     st.write(model.generate_content(prompt).text)
 
 # ================= CHECKLIST =================
@@ -217,7 +232,7 @@ if file and file2:
     t2 = extract_pdf(file2)
 
     prompt = f"""
-Compare documents:
+Compare Documents:
 
 OLD:
 {t1[:2000]}
