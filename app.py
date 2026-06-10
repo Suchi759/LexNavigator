@@ -94,7 +94,7 @@ input, textarea {
 
 # ================= HEADER =================
 st.markdown('<div class="main-header">⚖️ LEXNAVIGATOR AI</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Cinematic Legal Intelligence Engine • RAG Document Assistant</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header"> Legal Intelligence Engine • RAG Document Assistant</div>', unsafe_allow_html=True)
 
 st.markdown("---")
 
